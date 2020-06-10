@@ -145,20 +145,17 @@
 
     <distributionManagement>
         <repository>
-            <id>maven.mooc.fi.releases</id>
-            <url>s3://maven.mooc.fi/releases</url>
+            <id>local-mvn</id>
+            <name>Local Maven</name>
+            <url>file:///drive/4tb/ext4/Dev/tmc/local-mvn</url>
         </repository>
-        <snapshotRepository>
-            <id>maven.mooc.fi.snapshots</id>
-            <url>s3://maven.mooc.fi/snapshots</url>
-        </snapshotRepository>
     </distributionManagement>
 
     <repositories>
         <repository>
             <id>tmc</id>
             <name>TMC repo</name>
-            <url>http://maven.testmycode.net/nexus/content/groups/public</url>
+            <url>http://maven.mooc.fi/snapshots</url>
             <releases>
                 <enabled>true</enabled>
             </releases>
@@ -232,13 +229,13 @@
         <dependency>
             <groupId>fi.helsinki.cs.tmc</groupId>
             <artifactId>tmc-langs-abstraction</artifactId>
-            <version>1.0.0</version>
+            <version>1.0.1-SNAPSHOT</version>
         </dependency>
 
         <dependency>
             <groupId>fi.helsinki.cs.tmc</groupId>
             <artifactId>tmc-langs-util</artifactId>
-            <version>0.7.16-SNAPSHOT</version>
+            <version>0.7.17-SNAPSHOT</version>
         </dependency>
 
         <dependency>
@@ -404,7 +401,7 @@
         <dependency>
             <groupId>fi.helsinki.cs.tmc</groupId>
             <artifactId>tmc-junit-runner</artifactId>
-            <version>0.2.5</version>
+            <version>0.2.9-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>org.apache.oltu.oauth2</groupId>
