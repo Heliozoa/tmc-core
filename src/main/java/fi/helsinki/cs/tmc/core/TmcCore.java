@@ -5,7 +5,6 @@ import fi.helsinki.cs.tmc.core.commands.DownloadCompletedExercises;
 import fi.helsinki.cs.tmc.core.commands.DownloadModelSolution;
 import fi.helsinki.cs.tmc.core.commands.DownloadOrUpdateExercises;
 import fi.helsinki.cs.tmc.core.commands.GetCourseDetails;
-import fi.helsinki.cs.tmc.core.commands.GetOrganizations;
 import fi.helsinki.cs.tmc.core.commands.GetUnreadReviews;
 import fi.helsinki.cs.tmc.core.commands.GetUpdatableExercises;
 import fi.helsinki.cs.tmc.core.commands.ListCourses;
@@ -38,20 +37,34 @@ import fi.helsinki.cs.tmc.langs.util.TaskExecutor;
 import fi.helsinki.cs.tmc.snapshots.LoggableEvent;
 
 import com.google.common.annotations.Beta;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
+import java.lang.Runtime;
+import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.ArrayUtils;
 
 public class TmcCore {
 
     private static final Logger logger = LoggerFactory.getLogger(TmcCore.class);
 
     private static TmcCore instance;
+
+    private static String cliPath;
 
     // Singleton
     @Beta
@@ -71,9 +84,14 @@ public class TmcCore {
         TmcCore.instance = instance;
     }
 
+    public static void setCliPath(String cliPath) {
+        TmcCore.cliPath = cliPath;
+    }
+
     // TODO: remember to remind to instantiate Settings and Langs holders...
     @Beta
-    public TmcCore() {}
+    public TmcCore() {
+    }
 
     public TmcCore(TmcSettings settings, TaskExecutor tmcLangs) {
         TmcSettingsHolder.set(settings);
@@ -83,9 +101,56 @@ public class TmcCore {
         normalizer.selectOrganizationAndCourse();
     }
 
-    public Callable<List<Organization>> getOrganizations(ProgressObserver observer) {
-        logger.info("Creating new GetOrganizations command");
-        return new GetOrganizations(observer);
+    private ExecutionResult execute(String[] args) {
+        if (TmcCore.cliPath == null) {
+            throw new IllegalStateException("tmc core command used before cliPath was set");
+        }
+        List<String> cmd = new ArrayList<String>();
+        cmd.add(TmcCore.cliPath);
+        TmcSettings settings = TmcSettingsHolder.get();
+        String email = settings.getEmail().get();
+        String password = settings.getPassword().get();
+        String[] coreArgs = { "core", "--email", email };
+
+        try {
+            Runtime rt = Runtime.getRuntime();
+            cmd.addAll(Arrays.asList(coreArgs));
+            cmd.addAll(Arrays.asList(args));
+            logger.info("executing {}", cmd);
+
+            Process ps = rt.exec(cmd.toArray(new String[0]));
+            OutputStream outputStream = ps.getOutputStream();
+            byte[] passwordBytes = (password + "\n").getBytes(StandardCharsets.UTF_8.name());
+            outputStream.write(passwordBytes);
+            outputStream.close();
+            ps.waitFor();
+
+            int exitValue = ps.exitValue();
+            InputStream inputStream = ps.getInputStream();
+            String stdout = IOUtils.toString(inputStream, StandardCharsets.UTF_8.name());
+            InputStream errorStream = ps.getErrorStream();
+            String stderr = IOUtils.toString(errorStream, StandardCharsets.UTF_8.name());
+            logger.trace("exit code: {}", exitValue);
+            logger.trace("stdout: {}", stdout);
+            logger.trace("stderr: {}", stderr);
+            return new ExecutionResult(exitValue, stdout, stderr);
+        } catch (Exception e) {
+            // todo
+            throw new RuntimeException("Error running command " + e.getMessage());
+        }
+    }
+
+    public List<Organization> getOrganizations() {
+        ExecutionResult result = this.execute(new String[] { "get-organizations" });
+        if (result.success) {
+            Gson gson = new Gson();
+            Type listType = new TypeToken<ArrayList<Organization>>() {
+            }.getType();
+            ArrayList<Organization> orgs = gson.fromJson(result.stdout, listType);
+            logger.debug("found {} organizations", orgs.size());
+            return orgs;
+        }
+        return null;
     }
 
     public Callable<Void> authenticate(ProgressObserver observer, String password) {
@@ -93,14 +158,12 @@ public class TmcCore {
         return new AuthenticateUser(observer, password, Oauth.getInstance());
     }
 
-    public Callable<Void> sendDiagnostics(
-            ProgressObserver observer) {
+    public Callable<Void> sendDiagnostics(ProgressObserver observer) {
         logger.info("Creating new SendDiagnostics command");
         return new SendDiagnostics(observer);
     }
 
-    public Callable<List<Exercise>> downloadOrUpdateExercises(
-            ProgressObserver observer, List<Exercise> exercises) {
+    public Callable<List<Exercise>> downloadOrUpdateExercises(ProgressObserver observer, List<Exercise> exercises) {
         logger.info("Creating new DownloadOrUpdateExercises command");
         return new ExceptionTrackingCallable<>(new DownloadOrUpdateExercises(observer, exercises));
     }
@@ -116,8 +179,7 @@ public class TmcCore {
         return new ExceptionTrackingCallable<>(new ListCourses(observer));
     }
 
-    public Callable<URI> pasteWithComment(
-            ProgressObserver observer, Exercise exercise, String message) {
+    public Callable<URI> pasteWithComment(ProgressObserver observer, Exercise exercise, String message) {
         logger.info("Creating new PasteWithComment command");
         return new ExceptionTrackingCallable<>(new PasteWithComment(observer, exercise, message));
     }
@@ -132,14 +194,13 @@ public class TmcCore {
         return new ExceptionTrackingCallable<>(new RunTests(observer, exercise));
     }
 
-    public Callable<Boolean> sendFeedback(
-            ProgressObserver observer, List<FeedbackAnswer> answers, URI feedbackUri) {
+    public Callable<Boolean> sendFeedback(ProgressObserver observer, List<FeedbackAnswer> answers, URI feedbackUri) {
         logger.info("Creating new SendFeedback command");
         return new ExceptionTrackingCallable<>(new SendFeedback(observer, answers, feedbackUri));
     }
 
-    public Callable<Void> sendSnapshotEvents(
-            final ProgressObserver observer, final Course currentCourse, final List<LoggableEvent> events) {
+    public Callable<Void> sendSnapshotEvents(final ProgressObserver observer, final Course currentCourse,
+            final List<LoggableEvent> events) {
         logger.info("Creating new SendSnapshotEvents command");
         return new ExceptionTrackingCallable<>(new SendSnapshotEvents(observer, currentCourse, events));
 
@@ -150,13 +211,13 @@ public class TmcCore {
         return new ExceptionTrackingCallable<>(new Submit(observer, exercise));
     }
 
-    public Callable<SubmissionResult> submit(ProgressObserver observer, Exercise exercise, Consumer<SubmissionResponse> initialSubmissionResult) {
+    public Callable<SubmissionResult> submit(ProgressObserver observer, Exercise exercise,
+            Consumer<SubmissionResponse> initialSubmissionResult) {
         logger.info("Creating new Submit command");
         return new ExceptionTrackingCallable<>(new Submit(observer, exercise, initialSubmissionResult));
     }
 
-    public Callable<GetUpdatableExercises.UpdateResult> getExerciseUpdates(
-            ProgressObserver observer, Course course) {
+    public Callable<GetUpdatableExercises.UpdateResult> getExerciseUpdates(ProgressObserver observer, Course course) {
         logger.info("Creating new GetUpdatableExercises command");
         return new ExceptionTrackingCallable<>(new GetUpdatableExercises(observer, course));
     }
@@ -171,8 +232,8 @@ public class TmcCore {
         return new ExceptionTrackingCallable<>(new GetUnreadReviews(observer, course));
     }
 
-    public Callable<SubmissionResponse> requestCodeReview(
-            ProgressObserver observer, Exercise exercise, String messageForReviewer) {
+    public Callable<SubmissionResponse> requestCodeReview(ProgressObserver observer, Exercise exercise,
+            String messageForReviewer) {
         logger.info("Creating new RequestCodeReview command");
         return new ExceptionTrackingCallable<>(new RequestCodeReview(observer, exercise, messageForReviewer));
     }
@@ -185,7 +246,8 @@ public class TmcCore {
     /**
      * NOT IMPLEMENTED!
      *
-     * <p>TARGET: CORE MILESTONE 2.
+     * <p>
+     * TARGET: CORE MILESTONE 2.
      */
     public Callable<Void> downloadCompletedExercises(ProgressObserver observer) {
         logger.info("Creating new DownloadCompletedExercises command");
