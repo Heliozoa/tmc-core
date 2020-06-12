@@ -46,17 +46,17 @@ import org.slf4j.LoggerFactory;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.lang.Runtime;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.ArrayUtils;
 
 public class TmcCore {
 
@@ -101,24 +101,28 @@ public class TmcCore {
         normalizer.selectOrganizationAndCourse();
     }
 
+    // executes tmc-langs-cli core --email {email} [args]
     private ExecutionResult execute(String[] args) {
         if (TmcCore.cliPath == null) {
             throw new IllegalStateException("tmc core command used before cliPath was set");
         }
+
         List<String> cmd = new ArrayList<String>();
         cmd.add(TmcCore.cliPath);
         TmcSettings settings = TmcSettingsHolder.get();
         String email = settings.getEmail().get();
         String password = settings.getPassword().get();
         String[] coreArgs = { "core", "--email", email };
+        cmd.addAll(Arrays.asList(coreArgs));
+        cmd.addAll(Arrays.asList(args));
 
         try {
             Runtime rt = Runtime.getRuntime();
-            cmd.addAll(Arrays.asList(coreArgs));
-            cmd.addAll(Arrays.asList(args));
             logger.info("executing {}", cmd);
 
             Process ps = rt.exec(cmd.toArray(new String[0]));
+
+            // write password to stdin
             OutputStream outputStream = ps.getOutputStream();
             byte[] passwordBytes = (password + "\n").getBytes(StandardCharsets.UTF_8.name());
             outputStream.write(passwordBytes);
@@ -140,48 +144,98 @@ public class TmcCore {
         }
     }
 
-    public List<Organization> getOrganizations() {
+    public List<Organization> getOrganizations(ProgressObserver observer) {
+        observer.progress(1, 0.0, "Fetching organizations");
+
         ExecutionResult result = this.execute(new String[] { "get-organizations" });
-        if (result.success) {
-            Gson gson = new Gson();
-            Type listType = new TypeToken<ArrayList<Organization>>() {
-            }.getType();
-            ArrayList<Organization> orgs = gson.fromJson(result.stdout, listType);
-            logger.debug("found {} organizations", orgs.size());
-            return orgs;
-        }
-        return null;
+        observer.progress(1, 0.5, "Executed command");
+
+        Gson gson = new Gson();
+        Type listType = new TypeToken<ArrayList<Organization>>() {
+        }.getType();
+        ArrayList<Organization> orgs = gson.fromJson(result.stdout, listType);
+        logger.debug("found {} organizations", orgs.size());
+        observer.progress(1, 1.0, "Fetched organizations");
+        return orgs;
     }
 
+    // ?
     public Callable<Void> authenticate(ProgressObserver observer, String password) {
         logger.info("Creating new AuthenticateUser command");
         return new AuthenticateUser(observer, password, Oauth.getInstance());
     }
 
+    // low priority
     public Callable<Void> sendDiagnostics(ProgressObserver observer) {
         logger.info("Creating new SendDiagnostics command");
         return new SendDiagnostics(observer);
     }
 
-    public Callable<List<Exercise>> downloadOrUpdateExercises(ProgressObserver observer, List<Exercise> exercises) {
-        logger.info("Creating new DownloadOrUpdateExercises command");
-        return new ExceptionTrackingCallable<>(new DownloadOrUpdateExercises(observer, exercises));
+    public List<Exercise> downloadOrUpdateExercises(ProgressObserver observer, List<Exercise> exercises) {
+        observer.progress(1, 0.0, "Downloading exercises");
+        Path target = TmcSettingsHolder.get().getTmcProjectDirectory();
+        String exercisePaths = "";
+        boolean first = true;
+        for (Exercise exercise : exercises) {
+            if (first) {
+                first = false;
+            } else {
+                exercisePaths += ",";
+            }
+            exercisePaths += exercise.getId();
+            exercisePaths += ":";
+            exercisePaths += target.resolve(Paths.get(exercise.getCourseName(), exercise.getName()));
+        }
+        ExecutionResult result = this
+                .execute(new String[] { "download-or-update-exercises", "--exercises", exercisePaths });
+        observer.progress(1, 1.0, "Downloaded exercises");
+
+        return exercises;
     }
 
-    // TODO: returns new course.
-    public Callable<Course> getCourseDetails(ProgressObserver observer, Course course) {
-        logger.info("Creating new GetCourseDetails command");
-        return new ExceptionTrackingCallable<>(new GetCourseDetails(observer, course));
+    public Course getCourseDetails(ProgressObserver observer, int courseId) {
+        observer.progress(1, 0.0, "Fetching course details");
+
+        ExecutionResult result = this
+                .execute(new String[] { "get-course-details", "--courseId", String.valueOf(courseId) });
+        observer.progress(1, 0.5, "Executed command");
+
+        Gson gson = new Gson();
+        Course courseDetails = gson.fromJson(result.stdout, Course.class);
+        observer.progress(1, 1.0, "Fetched course details");
+
+        return courseDetails;
     }
 
-    public Callable<List<Course>> listCourses(ProgressObserver observer) {
-        logger.info("Creating new ListCourses command");
-        return new ExceptionTrackingCallable<>(new ListCourses(observer));
+    public List<Course> listCourses(ProgressObserver observer) {
+        observer.progress(1, 0.0, "Fetching course details");
+
+        // TODO: handle no org selected
+        String organizationSlug = TmcSettingsHolder.get().getOrganization().get().getSlug();
+        ExecutionResult result = this.execute(new String[] { "list-courses", "--organization", organizationSlug });
+        observer.progress(1, 0.5, "Executed command");
+
+        Gson gson = new Gson();
+        Type listType = new TypeToken<ArrayList<Course>>() {
+        }.getType();
+        List<Course> courses = gson.fromJson(result.stdout, listType);
+        observer.progress(1, 1.0, "Fetched course details");
+
+        return courses;
     }
 
-    public Callable<URI> pasteWithComment(ProgressObserver observer, Exercise exercise, String message) {
-        logger.info("Creating new PasteWithComment command");
-        return new ExceptionTrackingCallable<>(new PasteWithComment(observer, exercise, message));
+    public URI pasteWithComment(ProgressObserver observer, Exercise exercise, String message) {
+        observer.progress(1, 0.0, "Submitting to pastebin");
+
+        Path tmcRoot = TmcSettingsHolder.get().getTmcProjectDirectory();
+        Path projectPath = exercise.getExerciseDirectory(tmcRoot);
+
+        ExecutionResult result = this
+                .execute(new String[] { "paste-with-comment", "--exerciseId", String.valueOf(exercise.getId()),
+                        "--submissionPath", projectPath.toString(), "--pasteMessage", message });
+
+        observer.progress(1, 1.0, "Submit to pastebin");
+        return null;
     }
 
     public Callable<ValidationResult> runCheckStyle(ProgressObserver observer, Exercise exercise) {

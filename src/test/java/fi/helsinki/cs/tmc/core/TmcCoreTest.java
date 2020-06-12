@@ -1,9 +1,12 @@
 package fi.helsinki.cs.tmc.core;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
 
+import fi.helsinki.cs.tmc.core.commands.DownloadOrUpdateExercises;
 import fi.helsinki.cs.tmc.core.commands.GetCourseDetails;
 import fi.helsinki.cs.tmc.core.commands.GetUnreadReviews;
 import fi.helsinki.cs.tmc.core.commands.ListCourses;
@@ -140,10 +143,9 @@ public class TmcCoreTest {
         new Submit(observer, exercise).call();
     }
 
-    @Test
-    public void getOrganizations() {
+    private TmcCore initCore() {
         BasicConfigurator.configure();
-        Logger.getLogger(TmcCore.class).setLevel(Level.DEBUG);
+        Logger.getLogger(TmcCore.class).setLevel(Level.TRACE);
         Dotenv dotenv = Dotenv.load();
         String email = dotenv.get("EMAIL");
         String password = dotenv.get("PASSWORD");
@@ -155,7 +157,53 @@ public class TmcCoreTest {
         TmcCore core = new TmcCore();
         String cliPath = Paths.get(cli).toAbsolutePath().toString();
         TmcCore.setCliPath(cliPath);
-        List<Organization> orgs = core.getOrganizations();
+        return core;
+    }
+
+    @Test
+    public void getOrganizations() {
+        TmcCore core = initCore();
+        ProgressObserver p = mock(ProgressObserver.class);
+        List<Organization> orgs = core.getOrganizations(p);
         assertFalse(orgs.isEmpty());
+    }
+
+    @Test
+    public void downloadOrUpdateExercises() {
+        TmcCore core = initCore();
+        ProgressObserver p = mock(ProgressObserver.class);
+
+        List<Exercise> exercises = new ArrayList<Exercise>();
+        Exercise e1 = new Exercise("ex1", "co1");
+        e1.setId(83114);
+        Exercise e2 = new Exercise("ex2", "co2");
+        e2.setId(83114);
+        exercises.add(e1);
+        exercises.add(e2);
+        when(this.settings.getTmcProjectDirectory()).thenReturn(Paths.get("/", "tmp", "tmc"));
+
+        core.downloadOrUpdateExercises(p, exercises);
+    }
+
+    @Test
+    public void getCourseDetails() {
+        TmcCore core = initCore();
+        ProgressObserver p = mock(ProgressObserver.class);
+
+        Course course = core.getCourseDetails(p, 600);
+        assertEquals(course.getTitle(), "Java Programming I");
+    }
+
+    @Test
+    public void listCourses() {
+        TmcCore core = initCore();
+        ProgressObserver p = mock(ProgressObserver.class);
+
+        Organization mockOrg = mock(Organization.class);
+        when(mockOrg.getSlug()).thenReturn("mooc");
+        when(this.settings.getOrganization()).thenReturn(Optional.of(mockOrg));
+
+        List<Course> courses = core.listCourses(p);
+        assertFalse(courses.isEmpty());
     }
 }
