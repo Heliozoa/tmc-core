@@ -101,7 +101,8 @@ public class TmcCore {
         normalizer.selectOrganizationAndCourse();
     }
 
-    // executes tmc-langs-cli core --email {email} [args]
+    // executes tmc-langs-cli core --email {email} [args] and writes the password
+    // into stdin
     private ExecutionResult execute(String[] args) {
         if (TmcCore.cliPath == null) {
             throw new IllegalStateException("tmc core command used before cliPath was set");
@@ -174,20 +175,18 @@ public class TmcCore {
     public List<Exercise> downloadOrUpdateExercises(ProgressObserver observer, List<Exercise> exercises) {
         observer.progress(1, 0.0, "Downloading exercises");
         Path target = TmcSettingsHolder.get().getTmcProjectDirectory();
-        String exercisePaths = "";
-        boolean first = true;
+
+        List<String> args = new ArrayList<String>();
+        args.add("download-or-update-exercises");
         for (Exercise exercise : exercises) {
-            if (first) {
-                first = false;
-            } else {
-                exercisePaths += ",";
-            }
-            exercisePaths += exercise.getId();
-            exercisePaths += ":";
-            exercisePaths += target.resolve(Paths.get(exercise.getCourseName(), exercise.getName()));
+            args.add("--exercise");
+            args.add(String.valueOf(exercise.getId()));
+            args.add(target.resolve(Paths.get(exercise.getCourseName(), exercise.getName())).toString());
         }
-        ExecutionResult result = this
-                .execute(new String[] { "download-or-update-exercises", "--exercises", exercisePaths });
+        observer.progress(1, 0.5, "Prepared arguments");
+
+        ExecutionResult result = this.execute(args.toArray(new String[0]));
+        // TODO: check failure
         observer.progress(1, 1.0, "Downloaded exercises");
 
         return exercises;
@@ -229,30 +228,68 @@ public class TmcCore {
 
         Path tmcRoot = TmcSettingsHolder.get().getTmcProjectDirectory();
         Path projectPath = exercise.getExerciseDirectory(tmcRoot);
-
         ExecutionResult result = this
                 .execute(new String[] { "paste-with-comment", "--exerciseId", String.valueOf(exercise.getId()),
                         "--submissionPath", projectPath.toString(), "--pasteMessage", message });
+        observer.progress(1, 0.5, "Executed command");
 
+        Gson gson = new Gson();
+        SubmissionResponse submissionResponse = gson.fromJson(result.stdout, SubmissionResponse.class);
         observer.progress(1, 1.0, "Submit to pastebin");
-        return null;
+
+        return submissionResponse.pasteUrl;
     }
 
-    public Callable<ValidationResult> runCheckStyle(ProgressObserver observer, Exercise exercise) {
-        logger.info("Creating new RunCheckStyle command");
-        return new ExceptionTrackingCallable<>(new RunCheckStyle(observer, exercise));
+    public ValidationResult runCheckStyle(ProgressObserver observer, Exercise exercise) {
+        observer.progress(1, 0.0, "Running checkstyle");
+
+        Path tmcRoot = TmcSettingsHolder.get().getTmcProjectDirectory();
+        Path projectPath = exercise.getExerciseDirectory(tmcRoot);
+        ExecutionResult result = this.execute(new String[] { "run-checkstyle", "--exerciseId",
+                String.valueOf(exercise.getId()), "--submissionPath", projectPath.toString(), "--locale", "en" });
+        observer.progress(1, 0.5, "Executed command");
+
+        Gson gson = new Gson();
+        ValidationResult validationResult = gson.fromJson(result.stdout, ValidationResult.class);
+        observer.progress(1, 1.0, "Ran checkstyle");
+
+        return validationResult;
     }
 
-    public Callable<RunResult> runTests(ProgressObserver observer, Exercise exercise) {
-        logger.info("Creating new RunTests command");
-        return new ExceptionTrackingCallable<>(new RunTests(observer, exercise));
+    public RunResult runTests(ProgressObserver observer, Exercise exercise) {
+        observer.progress(1, 0.0, "Running tests");
+
+        Path path = exercise.getExerciseDirectory(TmcSettingsHolder.get().getTmcProjectDirectory());
+        ExecutionResult result = this.execute(new String[] { "run-tests", "--exercisePath", path.toString() });
+        observer.progress(1, 0.5, "Executed command");
+
+        Gson gson = new Gson();
+        RunResult runResult = gson.fromJson(result.stdout, RunResult.class);
+        observer.progress(1, 1.0, "Ran tests");
+
+        return runResult;
     }
 
-    public Callable<Boolean> sendFeedback(ProgressObserver observer, List<FeedbackAnswer> answers, URI feedbackUri) {
-        logger.info("Creating new SendFeedback command");
-        return new ExceptionTrackingCallable<>(new SendFeedback(observer, answers, feedbackUri));
+    public Boolean sendFeedback(ProgressObserver observer, List<FeedbackAnswer> answers, URI feedbackUri) {
+        observer.progress(1, 0.0, "Sending feedback");
+
+        List<String> args = new ArrayList<String>();
+        args.add("send-feedback");
+        args.add("--feedbackUrl");
+        args.add(feedbackUri.toString());
+        for (FeedbackAnswer answer : answers) {
+            args.add("--feedback");
+            args.add(String.valueOf(answer.getQuestion().getId()));
+            args.add(answer.getAnswer());
+        }
+
+        ExecutionResult result = this.execute(args.toArray(new String[0]));
+        // TODO: check success
+        observer.progress(1, 1.0, "Sent feedback");
+        return result.success;
     }
 
+    // low priority
     public Callable<Void> sendSnapshotEvents(final ProgressObserver observer, final Course currentCourse,
             final List<LoggableEvent> events) {
         logger.info("Creating new SendSnapshotEvents command");
@@ -271,9 +308,27 @@ public class TmcCore {
         return new ExceptionTrackingCallable<>(new Submit(observer, exercise, initialSubmissionResult));
     }
 
-    public Callable<GetUpdatableExercises.UpdateResult> getExerciseUpdates(ProgressObserver observer, Course course) {
-        logger.info("Creating new GetUpdatableExercises command");
-        return new ExceptionTrackingCallable<>(new GetUpdatableExercises(observer, course));
+    public GetUpdatableExercises.UpdateResult getExerciseUpdates(ProgressObserver observer, Course course) {
+        observer.progress(1, 0.0, "Getting exercise updates");
+
+        List<String> args = new ArrayList<String>();
+        args.add("get-exercise-updates");
+        args.add("--courseId");
+        args.add(String.valueOf(course.getId()));
+        for (Exercise exercise : course.getExercises()) {
+            args.add("--exercise");
+            args.add(String.valueOf(exercise.getId()));
+            args.add(exercise.getChecksum());
+        }
+        ExecutionResult result = this.execute(args.toArray(new String[0]));
+        observer.progress(1, 0.5, "Executed command");
+
+        Gson gson = new Gson();
+        GetUpdatableExercises.UpdateResult updateResult = gson.fromJson(result.stdout,
+                GetUpdatableExercises.UpdateResult.class);
+        observer.progress(1, 1.0, "Got exercise updates");
+
+        return updateResult;
     }
 
     public Callable<Void> markReviewAsRead(ProgressObserver observer, Review review) {
@@ -286,15 +341,32 @@ public class TmcCore {
         return new ExceptionTrackingCallable<>(new GetUnreadReviews(observer, course));
     }
 
-    public Callable<SubmissionResponse> requestCodeReview(ProgressObserver observer, Exercise exercise,
+    public SubmissionResponse requestCodeReview(ProgressObserver observer, Exercise exercise,
             String messageForReviewer) {
-        logger.info("Creating new RequestCodeReview command");
-        return new ExceptionTrackingCallable<>(new RequestCodeReview(observer, exercise, messageForReviewer));
+        observer.progress(1, 0.0, "Requesting code review");
+
+        Path target = exercise.getExtractionTarget(TmcSettingsHolder.get().getTmcProjectDirectory());
+        ExecutionResult result = this.execute(new String[] { "request-code-review", "--submissionUrl",
+                exercise.getSolutionDownloadUrl().toString(), "--target", target.toString() });
+        observer.progress(1, 0.5, "Executed command");
+
+        Gson gson = new Gson();
+        SubmissionResponse submissionResponse = gson.fromJson(result.stdout, SubmissionResponse.class);
+        observer.progress(1, 1.0, "Requested code review");
+
+        return submissionResponse;
     }
 
-    public Callable<Exercise> downloadModelSolution(ProgressObserver observer, Exercise exercise) {
-        logger.info("Creating new DownloadModelSolution command");
-        return new ExceptionTrackingCallable<>(new DownloadModelSolution(observer, exercise));
+    public Exercise downloadModelSolution(ProgressObserver observer, Exercise exercise) {
+        observer.progress(1, 0.0, "Downloading model solution");
+
+        Path target = exercise.getExtractionTarget(TmcSettingsHolder.get().getTmcProjectDirectory());
+        ExecutionResult result = this.execute(new String[] { "download-model-solution", "--solutionDownloadUrl",
+                exercise.getSolutionDownloadUrl().toString(), "--target", target.toString() });
+        // TODO: check result
+        observer.progress(1, 1.0, "Downloaded model solution");
+
+        return exercise;
     }
 
     /**
