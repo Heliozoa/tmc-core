@@ -14,11 +14,19 @@ public class ExecutionResult {
     int exitValue;
     String stdout;
     String stderr;
-    
+
     public ExecutionResult(int exitValue, String stdout, String stderr) {
         this.success = exitValue == 0;
         this.exitValue = exitValue;
         this.stdout = stdout;
         this.stderr = stderr;
+    }
+
+    public String getStdout() {
+        return this.stdout;
+    }
+
+    public boolean getSuccess() {
+        return this.success;
     }
 }

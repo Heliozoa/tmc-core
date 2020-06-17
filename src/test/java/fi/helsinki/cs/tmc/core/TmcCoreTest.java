@@ -161,10 +161,10 @@ public class TmcCoreTest {
     }
 
     @Test
-    public void getOrganizations() {
+    public void getOrganizations() throws Exception {
         TmcCore core = initCore();
         ProgressObserver p = mock(ProgressObserver.class);
-        List<Organization> orgs = core.getOrganizations(p);
+        List<Organization> orgs = core.getOrganizations(p).call();
         assertFalse(orgs.isEmpty());
     }
 
@@ -186,16 +186,17 @@ public class TmcCoreTest {
     }
 
     @Test
-    public void getCourseDetails() {
+    public void getCourseDetails() throws Exception {
         TmcCore core = initCore();
         ProgressObserver p = mock(ProgressObserver.class);
+        Course c = mock(Course.class);
 
-        Course course = core.getCourseDetails(p, 600);
+        Course course = core.getCourseDetails(p, c).call();
         assertEquals(course.getTitle(), "Java Programming I");
     }
 
     @Test
-    public void listCourses() {
+    public void listCourses() throws Exception {
         TmcCore core = initCore();
         ProgressObserver p = mock(ProgressObserver.class);
 
@@ -203,7 +204,7 @@ public class TmcCoreTest {
         when(mockOrg.getSlug()).thenReturn("mooc");
         when(this.settings.getOrganization()).thenReturn(Optional.of(mockOrg));
 
-        List<Course> courses = core.listCourses(p);
+        List<Course> courses = core.listCourses(p).call();
         assertFalse(courses.isEmpty());
     }
 }

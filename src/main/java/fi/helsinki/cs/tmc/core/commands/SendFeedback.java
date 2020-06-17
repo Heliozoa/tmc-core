@@ -1,5 +1,6 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory;
 import fi.helsinki.cs.tmc.core.domain.ProgressObserver;
 import fi.helsinki.cs.tmc.core.domain.submission.FeedbackAnswer;
@@ -11,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -30,10 +32,7 @@ public class SendFeedback extends Command<Boolean> {
     }
 
     @VisibleForTesting
-    SendFeedback(
-            ProgressObserver observer,
-            List<FeedbackAnswer> answers,
-            URI feedbackUri,
+    SendFeedback(ProgressObserver observer, List<FeedbackAnswer> answers, URI feedbackUri,
             TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory) {
         super(observer, tmcServerCommunicationTaskFactory);
         this.answers = answers;
@@ -42,34 +41,25 @@ public class SendFeedback extends Command<Boolean> {
 
     @Override
     public Boolean call() throws Exception {
-        logger.info("Sending feedback answers");
-        informObserver(0, "Sending feedback answers");
+        observer.progress(1, 0.0, "Sending feedback");
 
-        String response =
-                tmcServerCommunicationTaskFactory
-                        .getFeedbackAnsweringJob(feedbackUri, answers)
-                        .call();
-
-        if (respondedSuccessfully(response)) {
-            logger.debug("Successfully sent feedback");
-            informObserver(1, "Feedback submitted");
-            return true;
-        } else {
-            logger.debug(
-                    "Failed to send feedback, server responded with {}",
-                    response
-            );
-            informObserver(1, "Failed to submit feedback");
-            return false;
+        List<String> args = new ArrayList<String>();
+        args.add("send-feedback");
+        args.add("--feedbackUrl");
+        args.add(feedbackUri.toString());
+        for (FeedbackAnswer answer : answers) {
+            args.add("--feedback");
+            args.add(String.valueOf(answer.getQuestion().getId()));
+            args.add(answer.getAnswer());
         }
+
+        ExecutionResult result = this.execute(args.toArray(new String[0]));
+        // TODO: check success
+        observer.progress(1, 1.0, "Sent feedback");
+        return result.getSuccess();
     }
 
     private boolean respondedSuccessfully(String response) {
-        return new JsonParser()
-                .parse(response)
-                .getAsJsonObject()
-                .get("status")
-                .getAsString()
-                .equals("ok");
+        return new JsonParser().parse(response).getAsJsonObject().get("status").getAsString().equals("ok");
     }
 }

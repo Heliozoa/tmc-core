@@ -1,5 +1,6 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory;
 import fi.helsinki.cs.tmc.core.domain.ProgressObserver;
 import fi.helsinki.cs.tmc.core.domain.Review;
@@ -18,9 +19,7 @@ public class MarkReviewAsRead extends Command<Void> {
         this.review = review;
     }
 
-    MarkReviewAsRead(
-            ProgressObserver observer,
-            Review review,
+    MarkReviewAsRead(ProgressObserver observer, Review review,
             TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory) {
         super(observer, tmcServerCommunicationTaskFactory);
         this.review = review;
@@ -28,8 +27,12 @@ public class MarkReviewAsRead extends Command<Void> {
 
     @Override
     public Void call() throws Exception {
-        logger.info("Marking review {} as read", review);
-        tmcServerCommunicationTaskFactory.getMarkingReviewAsReadTask(review, true).call();
+        observer.progress(1, 0.0, "Marking review as read");
+
+        ExecutionResult result = this
+                .execute(new String[] { "mark-review-as-read", "--reviewUpdateUrl", review.getUpdateUrl().toString() });
+        // TODO: check result
+        observer.progress(1, 1.0, "Marked review as read");
         return null;
     }
 }

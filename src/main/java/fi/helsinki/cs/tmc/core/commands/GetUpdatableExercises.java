@@ -1,5 +1,6 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory;
 import fi.helsinki.cs.tmc.core.domain.Course;
 import fi.helsinki.cs.tmc.core.domain.Exercise;
@@ -9,6 +10,7 @@ import fi.helsinki.cs.tmc.core.utilities.ServerErrorHelper;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.gson.Gson;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,61 +54,33 @@ public class GetUpdatableExercises extends Command<GetUpdatableExercises.UpdateR
     }
 
     @VisibleForTesting
-    GetUpdatableExercises(
-            ProgressObserver observer,
-            TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory,
-            Course course) {
+    GetUpdatableExercises(ProgressObserver observer,
+            TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory, Course course) {
         super(observer, tmcServerCommunicationTaskFactory);
         this.course = course;
     }
 
     @Override
     public UpdateResult call() throws TmcCoreException {
-        logger.info("Looking for updatedable exercises");
-        informObserver(0, "Downloading course details from server");
-        Course updatedCourse;
-        try {
-            updatedCourse = new GetCourseDetails(
-                    ProgressObserver.NULL_OBSERVER,
-                    course,
-                    tmcServerCommunicationTaskFactory).call();
-        } catch (Exception ex) {
-            logger.warn("Failed to fetch exercises from server", ex);
-            throw new TmcCoreException("Failed to fetch exercises from server. \n"
-                + ServerErrorHelper.getServerExceptionMsg(ex), ex);
+        observer.progress(1, 0.0, "Getting exercise updates");
+
+        List<String> args = new ArrayList<String>();
+        args.add("get-exercise-updates");
+        args.add("--courseId");
+        args.add(String.valueOf(course.getId()));
+        for (Exercise exercise : course.getExercises()) {
+            args.add("--exercise");
+            args.add(String.valueOf(exercise.getId()));
+            args.add(exercise.getChecksum());
         }
+        ExecutionResult result = this.execute(args.toArray(new String[0]));
+        observer.progress(1, 0.5, "Executed command");
 
-        checkInterrupt();
-        logger.debug("Parsing results");
-        informObserver(0.5, "Parsing response");
+        Gson gson = new Gson();
+        GetUpdatableExercises.UpdateResult updateResult = gson.fromJson(result.getStdout(),
+                GetUpdatableExercises.UpdateResult.class);
+        observer.progress(1, 1.0, "Got exercise updates");
 
-        List<Exercise> createExercises = new ArrayList<>();
-        List<Exercise> updatedExercises = new ArrayList<>();
-        Map<String, Exercise> oldExercises = new HashMap<>();
-
-        for (Exercise oldExercise : course.getExercises()) {
-            oldExercises.put(oldExercise.getName(), oldExercise);
-        }
-
-        List<Exercise> exercises = updatedCourse.getExercises();
-        int totalExercises = exercises.size();
-        for (int i = 0; i < totalExercises; i++) {
-            Exercise newExercise = exercises.get(i);
-
-            checkInterrupt();
-            informObserver(totalExercises + i, totalExercises * 2, "Parsing downloaded data");
-
-            Exercise oldExercise = oldExercises.get(newExercise.getName());
-            if (oldExercise == null) {
-                createExercises.add(newExercise);
-            } else if (!oldExercise.getChecksum().equals(newExercise.getChecksum())) {
-                updatedExercises.add(newExercise);
-            }
-        }
-
-        logger.debug("Parsing done");
-        informObserver(1, "Done checking for updatable exercises");
-
-        return new UpdateResult(createExercises, updatedExercises);
+        return updateResult;
     }
 }

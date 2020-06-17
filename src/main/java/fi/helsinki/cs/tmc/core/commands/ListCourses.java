@@ -1,5 +1,6 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory;
 import fi.helsinki.cs.tmc.core.domain.Course;
 import fi.helsinki.cs.tmc.core.domain.ProgressObserver;
@@ -7,13 +8,18 @@ import fi.helsinki.cs.tmc.core.exceptions.ConnectionFailedException;
 import fi.helsinki.cs.tmc.core.exceptions.NotLoggedInException;
 import fi.helsinki.cs.tmc.core.exceptions.ShowToUserException;
 import fi.helsinki.cs.tmc.core.exceptions.TmcCoreException;
+import fi.helsinki.cs.tmc.core.holders.TmcSettingsHolder;
 import fi.helsinki.cs.tmc.core.utilities.ServerErrorHelper;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import org.slf4j.Logger;
+import java.lang.reflect.Type;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -28,34 +34,25 @@ public class ListCourses extends Command<List<Course>> {
     }
 
     @VisibleForTesting
-    ListCourses(
-            ProgressObserver observer,
-            TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory) {
+    ListCourses(ProgressObserver observer, TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory) {
         super(observer, tmcServerCommunicationTaskFactory);
     }
 
     @Override
     public List<Course> call() throws TmcCoreException, ShowToUserException {
-        logger.info("Retrieving course list");
-        informObserver(0, "Retrieving course list");
-        try {
-            List<Course> result = tmcServerCommunicationTaskFactory
-                                        .getDownloadingCourseListTask()
-                                        .call();
-            informObserver(1, "Successfully fetched course list");
-            logger.debug("Successfully fetched course list");
-            return result;
-        } catch (Exception ex) {
-            if (ex instanceof NotLoggedInException) {
-                throw (NotLoggedInException)ex;
-            }
-            if (ex instanceof ShowToUserException) {
-                throw (ShowToUserException)ex;
-            }
-            logger.info("Failed to fetch courses from the server", ex);
-            informObserver(1, "Failed to fetch courses from the server");
-            throw new ConnectionFailedException("Failed to fetch courses from the server.\nPlease check your internet connection.\n\nThe error was:\n"
-                + ServerErrorHelper.getServerExceptionMsg(ex));
-        }
+        observer.progress(1, 0.0, "Fetching course details");
+
+        // TODO: handle no org selected
+        String organizationSlug = TmcSettingsHolder.get().getOrganization().get().getSlug();
+        ExecutionResult result = this.execute(new String[] { "list-courses", "--organization", organizationSlug });
+        observer.progress(1, 0.5, "Executed command");
+
+        Gson gson = new Gson();
+        Type listType = new TypeToken<ArrayList<Course>>() {
+        }.getType();
+        List<Course> courses = gson.fromJson(result.getStdout(), listType);
+        observer.progress(1, 1.0, "Fetched course details");
+
+        return courses;
     }
 }

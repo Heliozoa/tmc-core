@@ -1,5 +1,6 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory;
 import fi.helsinki.cs.tmc.core.domain.Exercise;
 import fi.helsinki.cs.tmc.core.domain.Progress;
@@ -19,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,8 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class DownloadOrUpdateExercises extends ExerciseDownloadingCommand<List<Exercise>> {
 
-    private static final Logger logger
-            = LoggerFactory.getLogger(DownloadOrUpdateExercises.class);
+    private static final Logger logger = LoggerFactory.getLogger(DownloadOrUpdateExercises.class);
 
     private List<Exercise> exercises;
 
@@ -39,63 +40,31 @@ public class DownloadOrUpdateExercises extends ExerciseDownloadingCommand<List<E
     }
 
     @VisibleForTesting
-    DownloadOrUpdateExercises(
-            ProgressObserver observer,
-            List<Exercise> exercises,
+    DownloadOrUpdateExercises(ProgressObserver observer, List<Exercise> exercises,
             TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory) {
-            super(observer, tmcServerCommunicationTaskFactory);
+        super(observer, tmcServerCommunicationTaskFactory);
         this.exercises = exercises;
     }
 
     @Override
     public List<Exercise> call() throws TmcInterruptionException {
-        List<Exercise> successfullyDownloaded = new ArrayList<>();
+        observer.progress(1, 0.0, "Downloading exercises");
+        Path target = TmcSettingsHolder.get().getTmcProjectDirectory();
 
-
-        logger.info("Downloading/updating {} exercises", exercises.size());
-
-        /*
-         * 3 states per exercise,
-         * 1) download zip
-         * 2) extract zip
-         * 3) done
-         */
-        Progress progress = new Progress(exercises.size() * 3.0);
+        List<String> args = new ArrayList<String>();
+        args.add("download-or-update-exercises");
         for (Exercise exercise : exercises) {
-
-            //TODO: Multi-thread?
-
-            checkInterrupt();
-
-            byte[] zip;
-            try {
-                zip = downloadExercise(exercise, progress);
-            } catch (Exception ex) {
-                logger.warn("Failed to download project from TMC-server", ex);
-                continue;
-            }
-
-            checkInterrupt();
-
-            try {
-                extractProject(zip, exercise, progress);
-            } catch (TmcCoreException e) {
-                logger.warn("Extracting project failed", e);
-                continue;
-            }
-
-            successfullyDownloaded.add(exercise);
-            informObserver(progress.incrementAndGet(),
-                           "Downloaded exercise " + exercise.getName());
-
-            //TODO: Update PluginState
-
-            //TODO: Make into future / callable / something?
+            args.add("--exercise");
+            args.add(String.valueOf(exercise.getId()));
+            args.add(target.resolve(Paths.get(exercise.getCourseName(), exercise.getName())).toString());
         }
+        observer.progress(1, 0.5, "Prepared arguments");
 
-        logger.info("Successfully downloaded and extracted {} exercises",
-                successfullyDownloaded.size());
-        return successfullyDownloaded;
+        ExecutionResult result = this.execute(args.toArray(new String[0]));
+        // TODO: check failure
+        observer.progress(1, 1.0, "Downloaded exercises");
+
+        return exercises;
     }
 
 }

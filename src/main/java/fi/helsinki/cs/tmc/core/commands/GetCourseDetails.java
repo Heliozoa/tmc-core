@@ -1,5 +1,6 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory;
 import fi.helsinki.cs.tmc.core.domain.Course;
 import fi.helsinki.cs.tmc.core.domain.ProgressObserver;
@@ -7,6 +8,7 @@ import fi.helsinki.cs.tmc.core.exceptions.NotLoggedInException;
 import fi.helsinki.cs.tmc.core.exceptions.TmcCoreException;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.gson.Gson;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,9 +29,7 @@ public class GetCourseDetails extends Command<Course> {
         this.course = course;
     }
 
-    GetCourseDetails(
-            ProgressObserver observer,
-            Course course,
+    GetCourseDetails(ProgressObserver observer, Course course,
             TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory) {
         super(observer, tmcServerCommunicationTaskFactory);
         this.course = course;
@@ -37,22 +37,16 @@ public class GetCourseDetails extends Command<Course> {
 
     @Override
     public Course call() throws TmcCoreException, URISyntaxException {
-        logger.info("Fetching course details");
-        informObserver(0, "Refreshing course.");
-        try {
-            Course result = tmcServerCommunicationTaskFactory
-                                .getFullCourseInfoTask(course)
-                                .call();
-            logger.info("Successfully got course details");
-            informObserver(1, "Course refresh completed successfully");
-            return result;
-        } catch (Exception ex) {
-            if (ex instanceof NotLoggedInException) {
-                throw (NotLoggedInException)ex;
-            }
-            logger.warn("Failed to get course details for course " + course.getName(), ex);
-            informObserver(1, "Failed to refresh course");
-            throw new TmcCoreException("Failed to get course details", ex);
-        }
+        observer.progress(1, 0.0, "Fetching course details");
+
+        ExecutionResult result = this
+                .execute(new String[] { "get-course-details", "--courseId", String.valueOf(course.getId()) });
+        observer.progress(1, 0.5, "Executed command");
+
+        Gson gson = new Gson();
+        Course courseDetails = gson.fromJson(result.getStdout(), Course.class);
+        observer.progress(1, 1.0, "Fetched course details");
+
+        return courseDetails;
     }
 }

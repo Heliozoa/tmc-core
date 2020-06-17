@@ -1,15 +1,20 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory;
+import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory.SubmissionResponse;
 import fi.helsinki.cs.tmc.core.domain.Exercise;
 import fi.helsinki.cs.tmc.core.domain.ProgressObserver;
+import fi.helsinki.cs.tmc.core.holders.TmcSettingsHolder;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.gson.Gson;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,10 +35,7 @@ public class PasteWithComment extends AbstractSubmissionCommand<URI> {
     }
 
     @VisibleForTesting
-    PasteWithComment(
-            ProgressObserver observer,
-            Exercise exercise,
-            String message,
+    PasteWithComment(ProgressObserver observer, Exercise exercise, String message,
             TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory) {
         super(observer, tmcServerCommunicationTaskFactory);
         this.exercise = exercise;
@@ -42,20 +44,18 @@ public class PasteWithComment extends AbstractSubmissionCommand<URI> {
 
     @Override
     public URI call() throws Exception {
-        logger.info("Creating a TMC paste");
-        informObserver(0, "Creating a TMC paste");
+        observer.progress(1, 0.0, "Submitting to pastebin");
 
-        Map<String, String> extraParams = new HashMap<>();
-        extraParams.put("paste", "1");
-        if (!this.message.isEmpty()) {
-            extraParams.put("message_for_paste", message);
-        }
+        Path tmcRoot = TmcSettingsHolder.get().getTmcProjectDirectory();
+        Path projectPath = exercise.getExerciseDirectory(tmcRoot);
+        ExecutionResult result = this
+                .execute(new String[] { "paste-with-comment", "--exerciseId", String.valueOf(exercise.getId()),
+                        "--submissionPath", projectPath.toString(), "--pasteMessage", message });
+        observer.progress(1, 0.5, "Executed command");
 
-        TmcServerCommunicationTaskFactory.SubmissionResponse submissionResponse =
-                submitToServer(exercise, extraParams);
-
-        logger.debug("Successfully created TMC paste");
-        informObserver(1, "Successfully created TMC paste");
+        Gson gson = new Gson();
+        SubmissionResponse submissionResponse = gson.fromJson(result.getStdout(), SubmissionResponse.class);
+        observer.progress(1, 1.0, "Submit to pastebin");
 
         return submissionResponse.pasteUrl;
     }

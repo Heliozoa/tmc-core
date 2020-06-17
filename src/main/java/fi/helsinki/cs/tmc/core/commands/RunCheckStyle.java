@@ -1,5 +1,6 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.domain.Exercise;
 import fi.helsinki.cs.tmc.core.domain.ProgressObserver;
 import fi.helsinki.cs.tmc.core.exceptions.TmcCoreException;
@@ -12,6 +13,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+
+import com.google.gson.Gson;
 
 /**
  * A {@link Command} for running code style validations on an exercise.
@@ -29,23 +32,18 @@ public class RunCheckStyle extends Command<ValidationResult> {
 
     @Override
     public ValidationResult call() throws TmcCoreException {
-        logger.info("Running code style validation for exercise {}", exercise.getName());
-        informObserver(0, "Running code style validation");
+        observer.progress(1, 0.0, "Running checkstyle");
 
-        Path path = exercise.getExerciseDirectory(TmcSettingsHolder.get().getTmcProjectDirectory());
-        logger.debug("Determined exercise path: {}", path);
+        Path tmcRoot = TmcSettingsHolder.get().getTmcProjectDirectory();
+        Path projectPath = exercise.getExerciseDirectory(tmcRoot);
+        ExecutionResult result = this.execute(new String[] { "run-checkstyle", "--exerciseId",
+                String.valueOf(exercise.getId()), "--submissionPath", projectPath.toString(), "--locale", "en" });
+        observer.progress(1, 0.5, "Executed command");
 
-        try {
-            logger.debug("Calling TMC langs");
-            ValidationResult result = TmcLangsHolder.get()
-                                            .runCheckCodeStyle(path, settings.getLocale());
-            logger.debug("Received validation result");
-            informObserver(1, "Finished running code style validation");
-            return result;
-        } catch (NoLanguagePluginFoundException ex) {
-            informObserver(1, "Failed to run code style validation");
-            logger.warn("Failed to run code style validations on target path", ex);
-            throw new TmcCoreException("Unable to run code style validations on target path", ex);
-        }
+        Gson gson = new Gson();
+        ValidationResult validationResult = gson.fromJson(result.getStdout(), ValidationResult.class);
+        observer.progress(1, 1.0, "Ran checkstyle");
+
+        return validationResult;
     }
 }

@@ -1,5 +1,6 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.domain.Course;
 import fi.helsinki.cs.tmc.core.domain.ProgressObserver;
 import fi.helsinki.cs.tmc.core.domain.Review;
@@ -8,11 +9,17 @@ import fi.helsinki.cs.tmc.core.exceptions.TmcCoreException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.lang.reflect.Type;
 import java.util.concurrent.Callable;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
 /**
- * A {@link Command} for retrieving unread code reviews of a course from the TMC server.
+ * A {@link Command} for retrieving unread code reviews of a course from the TMC
+ * server.
  */
 public class GetUnreadReviews extends Command<List<Review>> {
 
@@ -20,8 +27,8 @@ public class GetUnreadReviews extends Command<List<Review>> {
     private Course course;
 
     /**
-     * Constructs a new get unread code review command that fetches unread code review for
-     * {@code course} using {@code handler}.
+     * Constructs a new get unread code review command that fetches unread code
+     * review for {@code course} using {@code handler}.
      */
     public GetUnreadReviews(ProgressObserver observer, Course course) {
         super(observer);
@@ -33,15 +40,17 @@ public class GetUnreadReviews extends Command<List<Review>> {
      */
     @Override
     public List<Review> call() throws Exception {
-        logger.info("Checking for new code reviews");
-        informObserver(0, "Checking for new reviews");
-        Callable<List<Review>> downloadReviews =
-                tmcServerCommunicationTaskFactory.getDownloadingReviewListTask(course);
+        observer.progress(1, 0.0, "Getting unread reviews");
 
-        List<Review> reviews = downloadReviews.call();
+        ExecutionResult result = this
+                .execute(new String[] { "get-unread-reviews", "--reviewsUrl", course.getReviewsUrl().toString() });
+        observer.progress(1, 0.5, "Executed command");
 
-        informObserver(1, "Done checking for new reviews");
-        logger.info("Checking for new reviews done");
+        Gson gson = new Gson();
+        Type listType = new TypeToken<ArrayList<Review>>() {
+        }.getType();
+        List<Review> reviews = gson.fromJson(result.getStdout(), listType);
+        observer.progress(1, 1.0, "Got unread reviews");
 
         return reviews;
     }
