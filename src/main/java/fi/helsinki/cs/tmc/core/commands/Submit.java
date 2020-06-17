@@ -1,5 +1,6 @@
 package fi.helsinki.cs.tmc.core.commands;
 
+import fi.helsinki.cs.tmc.core.ExecutionResult;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory.SubmissionResponse;
 import fi.helsinki.cs.tmc.core.communication.serialization.SubmissionResultParser;
@@ -10,11 +11,14 @@ import fi.helsinki.cs.tmc.core.exceptions.TmcCoreException;
 import fi.helsinki.cs.tmc.core.holders.TmcSettingsHolder;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.gson.Gson;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 
@@ -41,9 +45,7 @@ public class Submit extends AbstractSubmissionCommand<SubmissionResult> {
     }
 
     @VisibleForTesting
-    Submit(
-            ProgressObserver observer,
-            Exercise exercise,
+    Submit(ProgressObserver observer, Exercise exercise,
             TmcServerCommunicationTaskFactory tmcServerCommunicationTaskFactory) {
         super(observer, tmcServerCommunicationTaskFactory);
         this.exercise = exercise;
@@ -58,9 +60,17 @@ public class Submit extends AbstractSubmissionCommand<SubmissionResult> {
 
         // TODO: Force send snapshots
 
-        SubmissionResponse submissionResponse =
-                submitToServer(exercise, new HashMap<String, String>());
+        // submit to server
+        Path tmcRoot = TmcSettingsHolder.get().getTmcProjectDirectory();
+        Path projectPath = exercise.getExerciseDirectory(tmcRoot);
+        Locale locale = TmcSettingsHolder.get().getLocale();
+        ExecutionResult executionResult = this
+                .execute(new String[] { "submit", "--submissionUrl", exercise.getExerciseSubmissionsUrl().toString(),
+                        "--submissionPath", projectPath.toString(), "--locale", locale.toString() });
+        Gson gson = new Gson();
+        SubmissionResponse submissionResponse = gson.fromJson(executionResult.getStdout(), SubmissionResponse.class);
 
+        // wait for submission to be processed
         int pollInterval = DEFAULT_POLL_INTERVAL;
         int runtime = 0;
 
@@ -84,9 +94,8 @@ public class Submit extends AbstractSubmissionCommand<SubmissionResult> {
             }
             try {
                 logger.debug("Checking if server is done processing submission");
-                Callable<String> submissionResultFetcher =
-                        tmcServerCommunicationTaskFactory.getSubmissionFetchTask(
-                                submissionResponse.submissionUrl);
+                Callable<String> submissionResultFetcher = tmcServerCommunicationTaskFactory
+                        .getSubmissionFetchTask(submissionResponse.submissionUrl);
 
                 String submissionStatus = submissionResultFetcher.call();
                 SubmissionResult submission = new SubmissionResultParser().parseFromJson(submissionStatus);
@@ -105,8 +114,8 @@ public class Submit extends AbstractSubmissionCommand<SubmissionResult> {
                         informObserver(percentDone,
                                 "This seems to be taking a long time — "
                                         + "consider continuing to the next exercise while this is running. "
-                                        + "Your submission will still be graded. "
-                                        + "Check the results later at " + TmcSettingsHolder.get().getServerAddress());
+                                        + "Your submission will still be graded. " + "Check the results later at "
+                                        + TmcSettingsHolder.get().getServerAddress());
                     } else if (sandboxStatus == SubmissionResult.SandboxStatus.CREATED) {
                         logger.debug("Submission received. Waiting for it to be processed.");
                         percentDone = 0.3;

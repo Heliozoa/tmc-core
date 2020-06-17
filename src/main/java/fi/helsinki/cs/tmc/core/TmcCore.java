@@ -77,7 +77,8 @@ public class TmcCore {
         TmcCore.cliPath = cliPath;
     }
 
-    // TODO: remember to remind to instantiate Settings and Langs holders...
+    // TODO: remember to remind to instantiate Settings and Langs holders and CLI
+    // path...
     @Beta
     public TmcCore() {
     }
@@ -91,6 +92,9 @@ public class TmcCore {
     }
 
     public static String getCliPath() {
+        if (TmcCore.cliPath == null) {
+            throw new IllegalStateException("tmc core singleton used before initialized");
+        }
         return TmcCore.cliPath;
     }
 

@@ -31,7 +31,6 @@ public class MarkReviewAsRead extends Command<Void> {
 
         ExecutionResult result = this
                 .execute(new String[] { "mark-review-as-read", "--reviewUpdateUrl", review.getUpdateUrl().toString() });
-        // TODO: check result
         observer.progress(1, 1.0, "Marked review as read");
         return null;
     }

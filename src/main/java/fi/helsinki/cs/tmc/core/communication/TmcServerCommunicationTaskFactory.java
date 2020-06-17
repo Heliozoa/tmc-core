@@ -56,8 +56,7 @@ import java.util.zip.GZIPOutputStream;
  */
 public class TmcServerCommunicationTaskFactory {
 
-    private static final Logger LOG = LoggerFactory.getLogger(
-            TmcServerCommunicationTaskFactory.class.getName());
+    private static final Logger LOG = LoggerFactory.getLogger(TmcServerCommunicationTaskFactory.class.getName());
     public static final int API_VERSION = 8;
 
     private TmcSettings settings;
@@ -72,16 +71,11 @@ public class TmcServerCommunicationTaskFactory {
     }
 
     public TmcServerCommunicationTaskFactory(TmcSettings settings, Oauth oauth) {
-        this(settings, oauth, new CourseListParser(),
-                new CourseInfoParser(), new ReviewListParser());
+        this(settings, oauth, new CourseListParser(), new CourseInfoParser(), new ReviewListParser());
     }
 
-    public TmcServerCommunicationTaskFactory(
-            TmcSettings settings,
-            Oauth oauth,
-            CourseListParser courseListParser,
-            CourseInfoParser courseInfoParser,
-            ReviewListParser reviewListParser) {
+    public TmcServerCommunicationTaskFactory(TmcSettings settings, Oauth oauth, CourseListParser courseListParser,
+            CourseInfoParser courseInfoParser, ReviewListParser reviewListParser) {
         this.settings = settings;
         this.oauth = oauth;
         this.courseListParser = courseListParser;
@@ -102,9 +96,11 @@ public class TmcServerCommunicationTaskFactory {
      * Returns a Callable that calls the given Callable.
      *
      * <p>
-     * If the call fails once, the oauth token is refreshed and the call is done again.</p>
+     * If the call fails once, the oauth token is refreshed and the call is done
+     * again.
+     * </p>
      *
-     * @param <T> return type of the callable
+     * @param <T>      return type of the callable
      * @param callable Callable to be wrapped
      * @return The given Callable wrapped in another Callable
      */
@@ -119,7 +115,8 @@ public class TmcServerCommunicationTaskFactory {
                     throw new NotLoggedInException();
                 } catch (IOException e) {
                     if (e.getMessage().contains("Connection timed out")) {
-                        throw new ConnectionFailedException("Connection failed! Please check your internet connection via browser.");
+                        throw new ConnectionFailedException(
+                                "Connection failed! Please check your internet connection via browser.");
                     }
                     throw e;
                 }
@@ -127,8 +124,7 @@ public class TmcServerCommunicationTaskFactory {
         };
     }
 
-    private URI getCourseListUrl()
-            throws OAuthSystemException, OAuthProblemException, TmcCoreException {
+    private URI getCourseListUrl() throws OAuthSystemException, OAuthProblemException, TmcCoreException {
         String serverAddress = settings.getServerAddress();
         String url;
         Optional<Organization> organization = settings.getOrganization();
@@ -162,7 +158,7 @@ public class TmcServerCommunicationTaskFactory {
                 } catch (FailedHttpResponseException ex) {
                     return checkForObsoleteClient(ex);
                 }
-                //TODO: Cancellable?
+                // TODO: Cancellable?
             }
         });
     }
@@ -200,7 +196,8 @@ public class TmcServerCommunicationTaskFactory {
         url = url + "/courses/" + id;
         URI courseUrl = this.addApiCallQueryParameters(URI.create(url));
         String response = HttpTasks.getForText(courseUrl).call();
-        Course course = new Gson().fromJson(response, new TypeToken<Course>(){}.getType());
+        Course course = new Gson().fromJson(response, new TypeToken<Course>() {
+        }.getType());
         return Optional.fromNullable(course);
     }
 
@@ -218,7 +215,7 @@ public class TmcServerCommunicationTaskFactory {
                 }
             }
 
-            //TODO: Cancellable?
+            // TODO: Cancellable?
         });
     }
 
@@ -228,8 +225,7 @@ public class TmcServerCommunicationTaskFactory {
             @Override
             public Void call() throws Exception {
                 try {
-                    final Callable<String> download = HttpTasks
-                            .postForText(getUnlockUrl(course), params);
+                    final Callable<String> download = HttpTasks.postForText(getUnlockUrl(course), params);
                     download.call();
                     return null;
                 } catch (FailedHttpResponseException ex) {
@@ -237,7 +233,7 @@ public class TmcServerCommunicationTaskFactory {
                 }
             }
 
-            //TODO: Cancellable?
+            // TODO: Cancellable?
         });
     }
 
@@ -255,8 +251,8 @@ public class TmcServerCommunicationTaskFactory {
         return HttpTasks.getForBinary(addApiCallQueryParameters(zipUrl));
     }
 
-    public Callable<SubmissionResponse> getSubmittingExerciseTask(
-            final Exercise exercise, final byte[] sourceZip, Map<String, String> extraParams) {
+    public Callable<SubmissionResponse> getSubmittingExerciseTask(final Exercise exercise, final byte[] sourceZip,
+            Map<String, String> extraParams) {
 
         final Map<String, String> params = new LinkedHashMap<>();
         params.put("client_time", "" + (System.currentTimeMillis() / 1000L));
@@ -269,9 +265,8 @@ public class TmcServerCommunicationTaskFactory {
                 String response;
                 try {
                     final URI submitUrl = addApiCallQueryParameters(exercise.getReturnUrl());
-                    final Callable<String> upload = HttpTasks
-                            .uploadFileForTextDownload(submitUrl, params,
-                                    "submission[file]", sourceZip);
+                    final Callable<String> upload = HttpTasks.uploadFileForTextDownload(submitUrl, params,
+                            "submission[file]", sourceZip);
                     response = upload.call();
                 } catch (FailedHttpResponseException ex) {
                     return checkForObsoleteClient(ex);
@@ -279,24 +274,23 @@ public class TmcServerCommunicationTaskFactory {
 
                 JsonObject respJson = new JsonParser().parse(response).getAsJsonObject();
                 if (respJson.get("error") != null) {
-                    throw new RuntimeException(
-                            "Server responded with error: " + respJson.get("error"));
+                    throw new RuntimeException("Server responded with error: " + respJson.get("error"));
                 } else if (respJson.get("submission_url") != null) {
                     try {
-                        URI submissionUrl = addApiCallQueryParameters(new URI(respJson.get("submission_url").getAsString()));
+                        URI submissionUrl = addApiCallQueryParameters(
+                                new URI(respJson.get("submission_url").getAsString()));
                         URI pasteUrl = new URI(respJson.get("paste_url").getAsString());
                         URI showSubmissionUrl = new URI(respJson.get("show_submission_url").getAsString());
                         return new SubmissionResponse(submissionUrl, pasteUrl, showSubmissionUrl);
                     } catch (Exception e) {
-                        throw new RuntimeException(
-                                "Server responded with malformed " + "submission url");
+                        throw new RuntimeException("Server responded with malformed " + "submission url");
                     }
                 } else {
                     throw new RuntimeException("Server returned unknown response");
                 }
             }
 
-            //TODO: Cancellable?
+            // TODO: Cancellable?
         });
     }
 
@@ -331,7 +325,7 @@ public class TmcServerCommunicationTaskFactory {
                 }
             }
 
-            //TODO: Cancellable?
+            // TODO: Cancellable?
         });
     }
 
@@ -353,12 +347,11 @@ public class TmcServerCommunicationTaskFactory {
                 return null;
             }
 
-            //TODO: Cancellable?
+            // TODO: Cancellable?
         });
     }
 
-    public Callable<String> getFeedbackAnsweringJob(final URI answerUrl,
-            List<FeedbackAnswer> answers) {
+    public Callable<String> getFeedbackAnsweringJob(final URI answerUrl, List<FeedbackAnswer> answers) {
         final Map<String, String> params = new HashMap<>();
         for (int i = 0; i < answers.size(); ++i) {
             String keyPrefix = "answers[" + i + "]";
@@ -372,20 +365,19 @@ public class TmcServerCommunicationTaskFactory {
             public String call() throws Exception {
                 try {
                     final URI submitUrl = addApiCallQueryParameters(answerUrl);
-                    final Callable<String> upload = HttpTasks
-                            .postForText(submitUrl, params);
+                    final Callable<String> upload = HttpTasks.postForText(submitUrl, params);
                     return upload.call();
                 } catch (FailedHttpResponseException ex) {
                     return checkForObsoleteClient(ex);
                 }
             }
 
-            //TODO: Cancellable?
+            // TODO: Cancellable?
         });
     }
 
-    public Callable<Object> getSendEventLogJob(final URI snapshotServerUrl,
-            List<LoggableEvent> events) throws NotLoggedInException {
+    public Callable<Object> getSendEventLogJob(final URI snapshotServerUrl, List<LoggableEvent> events)
+            throws NotLoggedInException {
         final Map<String, String> extraHeaders = new LinkedHashMap<>();
         String username = settings.getUsername().isPresent() ? settings.getUsername().get() : "Username missing";
         extraHeaders.put("X-Tmc-Version", "1");
@@ -403,31 +395,26 @@ public class TmcServerCommunicationTaskFactory {
             @Override
             public Object call() throws Exception {
                 URI url = addApiCallQueryParameters(snapshotServerUrl);
-                final Callable<String> upload = HttpTasks
-                        .rawPostForText(url, data, extraHeaders);
+                final Callable<String> upload = HttpTasks.rawPostForText(url, data, extraHeaders);
                 upload.call();
                 return null;
             }
 
-            //TODO: Cancellable?
+            // TODO: Cancellable?
         });
     }
 
     public void fetchOauthCredentialsTask() throws Exception {
         URI credentialsUrl;
         if (settings.getServerAddress().endsWith("/")) {
-            credentialsUrl = URI.create(
-                settings.getServerAddress() + "api/v" + API_VERSION
-                    + "/application/" + settings.clientName() + "/credentials");
+            credentialsUrl = URI.create(settings.getServerAddress() + "api/v" + API_VERSION + "/application/"
+                    + settings.clientName() + "/credentials");
         } else {
-            credentialsUrl = URI.create(
-                settings.getServerAddress() + "/api/v" + API_VERSION
-                    + "/application/" + settings.clientName() + "/credentials");
+            credentialsUrl = URI.create(settings.getServerAddress() + "/api/v" + API_VERSION + "/application/"
+                    + settings.clientName() + "/credentials");
         }
         String response = HttpTasks.getForText(credentialsUrl).call();
-        OauthCredentials credentials =
-                new Gson().fromJson(
-                        response, OauthCredentials.class);
+        OauthCredentials credentials = new Gson().fromJson(response, OauthCredentials.class);
         settings.setOauthCredentials(Optional.fromNullable(credentials));
     }
 
@@ -442,7 +429,8 @@ public class TmcServerCommunicationTaskFactory {
         }
         URI organizationUrl = URI.create(url);
         String response = HttpTasks.getForText(organizationUrl).call();
-        List<Organization> organizations = new Gson().fromJson(response, new TypeToken<List<Organization>>(){}.getType());
+        List<Organization> organizations = new Gson().fromJson(response, new TypeToken<List<Organization>>() {
+        }.getType());
         return organizations;
     }
 
@@ -457,7 +445,8 @@ public class TmcServerCommunicationTaskFactory {
         }
         URI organizationUrl = this.addApiCallQueryParameters(URI.create(url));
         String response = HttpTasks.getForText(organizationUrl).call();
-        List<Exercise> exercises = new Gson().fromJson(response, new TypeToken<List<Exercise>>(){}.getType());
+        List<Exercise> exercises = new Gson().fromJson(response, new TypeToken<List<Exercise>>() {
+        }.getType());
         return exercises;
     }
 
@@ -477,7 +466,8 @@ public class TmcServerCommunicationTaskFactory {
         }
         URI organizationUrl = URI.create(url);
         String response = HttpTasks.getForText(organizationUrl).call();
-        Organization organization = new Gson().fromJson(response, new TypeToken<Organization>(){}.getType());
+        Organization organization = new Gson().fromJson(response, new TypeToken<Organization>() {
+        }.getType());
         return organization;
     }
 
@@ -493,7 +483,8 @@ public class TmcServerCommunicationTaskFactory {
 
         URI userInfoUrl = this.addApiCallQueryParameters(URI.create(url));
         String response = HttpTasks.getForText(userInfoUrl).call();
-        UserInfo userInfo = new Gson().fromJson(response, new TypeToken<UserInfo>(){}.getType());
+        UserInfo userInfo = new Gson().fromJson(response, new TypeToken<UserInfo>() {
+        }.getType());
         return userInfo;
     }
 
@@ -502,13 +493,11 @@ public class TmcServerCommunicationTaskFactory {
         GZIPOutputStream gzos = new GZIPOutputStream(bufferBos);
         OutputStreamWriter bufferWriter = new OutputStreamWriter(gzos, Charset.forName("UTF-8"));
 
-        Gson gson =
-                new GsonBuilder()
-                        .registerTypeAdapter(byte[].class, new ByteArrayGsonSerializer())
-                        .registerTypeAdapter(JsonMaker.class, new JsonMakerGsonSerializer())
-                        .create();
+        Gson gson = new GsonBuilder().registerTypeAdapter(byte[].class, new ByteArrayGsonSerializer())
+                .registerTypeAdapter(JsonMaker.class, new JsonMakerGsonSerializer()).create();
 
-        gson.toJson(events, new TypeToken<List<LoggableEvent>>() {}.getType(), bufferWriter);
+        gson.toJson(events, new TypeToken<List<LoggableEvent>>() {
+        }.getType(), bufferWriter);
         bufferWriter.close();
         gzos.close();
 
@@ -520,12 +509,8 @@ public class TmcServerCommunicationTaskFactory {
         if (ex.getStatusCode() == 404) {
             boolean obsolete;
             try {
-                obsolete =
-                        new JsonParser()
-                                .parse(ex.getEntityAsString())
-                                .getAsJsonObject()
-                                .get("obsolete_client")
-                                .getAsBoolean();
+                obsolete = new JsonParser().parse(ex.getEntityAsString()).getAsJsonObject().get("obsolete_client")
+                        .getAsBoolean();
             } catch (Exception ex2) {
                 obsolete = false;
             }

@@ -55,9 +55,10 @@ public class DownloadOrUpdateExercises extends ExerciseDownloadingCommand<List<E
         List<String> args = new ArrayList<String>();
         args.add("download-or-update-exercises");
         for (Exercise exercise : exercises) {
+            Path exercisePath = target.resolve(Paths.get(exercise.getCourseName(), exercise.getName()));
             args.add("--exercise");
             args.add(String.valueOf(exercise.getId()));
-            args.add(target.resolve(Paths.get(exercise.getCourseName(), exercise.getName())).toString());
+            args.add(exercisePath.toString());
         }
         observer.progress(1, 0.5, "Prepared arguments");
 

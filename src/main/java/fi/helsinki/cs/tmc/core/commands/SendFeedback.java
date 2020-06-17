@@ -52,10 +52,9 @@ public class SendFeedback extends Command<Boolean> {
             args.add(String.valueOf(answer.getQuestion().getId()));
             args.add(answer.getAnswer());
         }
-
         ExecutionResult result = this.execute(args.toArray(new String[0]));
-        // TODO: check success
         observer.progress(1, 1.0, "Sent feedback");
+
         return result.getSuccess();
     }
 

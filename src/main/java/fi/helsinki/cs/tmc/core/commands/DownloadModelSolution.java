@@ -39,7 +39,6 @@ public class DownloadModelSolution extends ExerciseDownloadingCommand<Exercise> 
         Path target = exercise.getExtractionTarget(TmcSettingsHolder.get().getTmcProjectDirectory());
         ExecutionResult result = this.execute(new String[] { "download-model-solution", "--solutionDownloadUrl",
                 exercise.getSolutionDownloadUrl().toString(), "--target", target.toString() });
-        // TODO: check result
         observer.progress(1, 1.0, "Downloaded model solution");
 
         return exercise;

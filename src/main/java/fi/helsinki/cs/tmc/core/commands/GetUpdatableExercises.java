@@ -60,6 +60,7 @@ public class GetUpdatableExercises extends Command<GetUpdatableExercises.UpdateR
         this.course = course;
     }
 
+    // CLI uses exercise id instead of name
     @Override
     public UpdateResult call() throws TmcCoreException {
         observer.progress(1, 0.0, "Getting exercise updates");

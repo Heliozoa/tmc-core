@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -36,9 +37,12 @@ public class RequestCodeReview extends AbstractSubmissionCommand<TmcServerCommun
     public TmcServerCommunicationTaskFactory.SubmissionResponse call() throws Exception {
         observer.progress(1, 0.0, "Requesting code review");
 
-        Path target = exercise.getExtractionTarget(TmcSettingsHolder.get().getTmcProjectDirectory());
-        ExecutionResult result = this.execute(new String[] { "request-code-review", "--submissionUrl",
-                exercise.getSolutionDownloadUrl().toString(), "--target", target.toString() });
+        Path tmcRoot = TmcSettingsHolder.get().getTmcProjectDirectory();
+        Path projectPath = exercise.getExerciseDirectory(tmcRoot);
+        Locale locale = TmcSettingsHolder.get().getLocale();
+        ExecutionResult result = this.execute(
+                new String[] { "request-code-review", "--submissionUrl", exercise.getSolutionDownloadUrl().toString(),
+                        "--submissionPath", projectPath.toString(), "--locale", locale.toString() });
         observer.progress(1, 0.5, "Executed command");
 
         Gson gson = new Gson();

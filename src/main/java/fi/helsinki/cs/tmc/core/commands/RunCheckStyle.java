@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
+import java.util.Locale;
 
 import com.google.gson.Gson;
 
@@ -32,17 +33,18 @@ public class RunCheckStyle extends Command<ValidationResult> {
 
     @Override
     public ValidationResult call() throws TmcCoreException {
-        observer.progress(1, 0.0, "Running checkstyle");
+        observer.progress(1, 0.0, "Running code style validation");
 
         Path tmcRoot = TmcSettingsHolder.get().getTmcProjectDirectory();
         Path projectPath = exercise.getExerciseDirectory(tmcRoot);
-        ExecutionResult result = this.execute(new String[] { "run-checkstyle", "--exerciseId",
-                String.valueOf(exercise.getId()), "--submissionPath", projectPath.toString(), "--locale", "en" });
+        Locale locale = TmcSettingsHolder.get().getLocale();
+        ExecutionResult result = this.execute(new String[] { "run-checkstyle", "--exercisePath", projectPath.toString(),
+                "--locale", locale.toString() });
         observer.progress(1, 0.5, "Executed command");
 
         Gson gson = new Gson();
         ValidationResult validationResult = gson.fromJson(result.getStdout(), ValidationResult.class);
-        observer.progress(1, 1.0, "Ran checkstyle");
+        observer.progress(1, 1.0, "Ran code style validation");
 
         return validationResult;
     }
