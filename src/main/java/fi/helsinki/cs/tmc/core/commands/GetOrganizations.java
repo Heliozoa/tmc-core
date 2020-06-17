@@ -26,16 +26,16 @@ public class GetOrganizations extends Command<List<Organization>> {
 
     @Override
     public List<Organization> call() throws Exception {
-        observer.progress(1, 0.0, "Fetching organizations");
+        this.observer.progress(1, 0.0, "Fetching organizations");
 
         ExecutionResult result = super.execute(new String[] { "get-organizations" });
-        observer.progress(1, 0.5, "Executed command");
+        this.observer.progress(1, 0.5, "Executed get-organizations");
 
         Gson gson = new Gson();
         Type listType = new TypeToken<ArrayList<Organization>>() {
         }.getType();
         ArrayList<Organization> orgs = gson.fromJson(result.getStdout(), listType);
-        observer.progress(1, 1.0, "Fetched organizations");
+        this.observer.progress(1, 1.0, "Fetched organizations");
         return orgs;
     }
 }

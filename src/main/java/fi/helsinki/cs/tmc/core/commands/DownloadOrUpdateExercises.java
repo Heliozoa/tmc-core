@@ -46,8 +46,9 @@ public class DownloadOrUpdateExercises extends ExerciseDownloadingCommand<List<E
         this.exercises = exercises;
     }
 
+    // TODO: CLI command exits when dl fails, old command continued
     @Override
-    public List<Exercise> call() throws TmcInterruptionException {
+    public List<Exercise> call() throws TmcCoreException {
         observer.progress(1, 0.0, "Downloading exercises");
         Path target = TmcSettingsHolder.get().getTmcProjectDirectory();
 
@@ -61,7 +62,6 @@ public class DownloadOrUpdateExercises extends ExerciseDownloadingCommand<List<E
         observer.progress(1, 0.5, "Prepared arguments");
 
         ExecutionResult result = this.execute(args.toArray(new String[0]));
-        // TODO: check failure
         observer.progress(1, 1.0, "Downloaded exercises");
 
         return exercises;

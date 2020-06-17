@@ -5,6 +5,7 @@ import fi.helsinki.cs.tmc.core.TmcCore;
 import fi.helsinki.cs.tmc.core.communication.TmcServerCommunicationTaskFactory;
 import fi.helsinki.cs.tmc.core.configuration.TmcSettings;
 import fi.helsinki.cs.tmc.core.domain.ProgressObserver;
+import fi.helsinki.cs.tmc.core.exceptions.TmcCoreException;
 import fi.helsinki.cs.tmc.core.exceptions.TmcInterruptionException;
 import fi.helsinki.cs.tmc.core.holders.TmcSettingsHolder;
 
@@ -113,7 +114,7 @@ public abstract class Command<E> implements Callable<E> {
 
     // executes tmc-langs-cli core --email {email} [args] and writes the password
     // into stdin
-    protected ExecutionResult execute(String[] args) {
+    protected ExecutionResult execute(String[] args) throws TmcCoreException {
         if (TmcCore.getCliPath() == null) {
             throw new IllegalStateException("tmc core command used before cliPath was set");
         }
@@ -148,10 +149,13 @@ public abstract class Command<E> implements Callable<E> {
             logger.trace("exit code: {}", exitValue);
             logger.trace("stdout: {}", stdout);
             logger.trace("stderr: {}", stderr);
-            return new ExecutionResult(exitValue, stdout, stderr);
+            ExecutionResult result = new ExecutionResult(exitValue, stdout, stderr);
+            if (!result.getSuccess()) {
+                throw new TmcCoreException("Command '" + args[0] + "' exited with nonzero status");
+            }
+            return result;
         } catch (Exception e) {
-            // todo
-            throw new RuntimeException("Error running command " + e.getMessage());
+            throw new TmcCoreException("Failed to execute core command", e);
         }
     }
 }

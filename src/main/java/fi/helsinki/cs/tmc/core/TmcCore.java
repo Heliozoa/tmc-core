@@ -99,7 +99,7 @@ public class TmcCore {
         return new GetOrganizations(observer);
     }
 
-    // ?
+    // unnecessary until a library is used instead of a CLI
     public Callable<Void> authenticate(ProgressObserver observer, String password) {
         logger.info("Creating new AuthenticateUser command");
         return new AuthenticateUser(observer, password, Oauth.getInstance());
